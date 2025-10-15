@@ -1,13 +1,9 @@
 package csc369;
 
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.StringTokenizer;
-
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapreduce.Mapper;

@@ -1,6 +1,7 @@
 package csc369;
 
 import java.io.*;
+
 import org.apache.hadoop.io.*;
 
 public class SumCountPair implements Writable {
