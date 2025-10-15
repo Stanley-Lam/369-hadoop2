@@ -41,16 +41,15 @@ public class UserMessages {
     //  Reducer: just one reducer class to perform the "join"
     public static class JoinReducer extends  Reducer<Text, Text, Text, Text> {
 
-	@Override
-	    public void reduce(Text key, Iterable<Text> values, Context context)  throws IOException, InterruptedException {
-	    ArrayList<String> name = new ArrayList();
-	    ArrayList<String> messages = new ArrayList();
+		@Override
+			public void reduce(Text key, Iterable<Text> values, Context context)  throws IOException, InterruptedException {
+			ArrayList<String> name = new ArrayList();
+			ArrayList<String> messages = new ArrayList();
 
-	    for (Text val : values) {
-		context.write(key, val);
-	    }
-	}
-    } 
-
+			for (Text val : values) {
+				context.write(key, val);
+			}
+		}
+    }
 
 }
