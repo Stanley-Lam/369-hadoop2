@@ -59,20 +59,86 @@ public class HadoopApp {
 	} else if ("CountryRequestCount".equalsIgnoreCase(otherArgs[0])) {
 
 		MultipleInputs.addInputPath(job, new Path(otherArgs[1]),
-				KeyValueTextInputFormat.class, CountryRequestCount.LogMapper.class );
+				KeyValueTextInputFormat.class, CountryRequestCount.LogMapper.class);
 		MultipleInputs.addInputPath(job, new Path(otherArgs[2]),
-				TextInputFormat.class, CountryRequestCount.CountryMapper.class );
+				TextInputFormat.class, CountryRequestCount.CountryMapper.class);
 
 		job.setReducerClass(CountryRequestCount.JoinReducer.class);
-		job.setMapOutputKeyClass(CountryCountKey.class);
-		job.setMapOutputValueClass(Text.class);
-		job.setPartitionerClass(CountryPartition.class);
-		job.setGroupingComparatorClass(CountryGroupingComparator.class);
 
 		job.setOutputKeyClass(CountryRequestCount.OUTPUT_KEY_CLASS);
 		job.setOutputValueClass(CountryRequestCount.OUTPUT_VALUE_CLASS);
 		FileOutputFormat.setOutputPath(job, new Path(otherArgs[3]));
-	} else {
+	} else if ("CountryUrlCount".equalsIgnoreCase(otherArgs[0])) {
+
+		Path logInput = new Path(otherArgs[1]);
+		Path countryInput = new Path(otherArgs[2]);
+		Path intermediateOutput = new Path("intermediate_country_url");
+		Path finalOutput = new Path(otherArgs[3]);
+
+		Job joinJob = new Job(conf, "Join Logs with Country");
+		joinJob.setJarByClass(HadoopApp.class);
+
+		MultipleInputs.addInputPath(joinJob, logInput, TextInputFormat.class, CountryUrlCount.LogMapper.class);
+		MultipleInputs.addInputPath(joinJob, countryInput, TextInputFormat.class, CountryUrlCount.CountryMapper.class);
+
+		joinJob.setReducerClass(CountryUrlCount.JoinReducer.class);
+		joinJob.setOutputKeyClass(Text.class);
+		joinJob.setOutputValueClass(IntWritable.class);
+		FileOutputFormat.setOutputPath(joinJob, intermediateOutput);
+
+		if (!joinJob.waitForCompletion(true)) {
+			System.err.println("Join phase failed.");
+			System.exit(1);
+		}
+
+		Job aggregateJob = new Job(conf, "Aggregate Country URL Counts");
+		aggregateJob.setJarByClass(HadoopApp.class);
+
+		aggregateJob.setMapperClass(CountryUrlCount.IdentityMapper.class);
+		aggregateJob.setReducerClass(CountryUrlCount.SumReducer.class);
+		aggregateJob.setOutputKeyClass(Text.class);
+		aggregateJob.setOutputValueClass(IntWritable.class);
+
+		FileInputFormat.setInputPaths(aggregateJob, intermediateOutput);
+		FileOutputFormat.setOutputPath(aggregateJob, finalOutput);
+
+		System.exit(aggregateJob.waitForCompletion(true) ? 0 : 1);
+	} else if ("CountryUrlReport".equalsIgnoreCase(otherArgs[0])) {
+
+		Path logInput = new Path(otherArgs[1]);
+		Path countryInput = new Path(otherArgs[2]);
+		Path intermediateOutput = new Path("intermediate_url_country");
+		Path finalOutput = new Path(otherArgs[3]);
+
+		Job joinJob = new Job(conf, "Join Logs with Country");
+		joinJob.setJarByClass(HadoopApp.class);
+
+		MultipleInputs.addInputPath(joinJob, logInput, TextInputFormat.class, CountryUrlReport.LogMapper.class);
+		MultipleInputs.addInputPath(joinJob, countryInput, TextInputFormat.class, CountryUrlReport.CountryMapper.class);
+
+		joinJob.setReducerClass(CountryUrlReport.JoinReducer.class);
+		joinJob.setOutputKeyClass(Text.class);
+		joinJob.setOutputValueClass(Text.class);
+		FileOutputFormat.setOutputPath(joinJob, intermediateOutput);
+
+		if (!joinJob.waitForCompletion(true)) {
+			System.err.println("Join phase failed.");
+			System.exit(1);
+		}
+
+		Job aggregateJob = new Job(conf, "Aggregate Country Lists per URL");
+		aggregateJob.setJarByClass(HadoopApp.class);
+		aggregateJob.setMapperClass(CountryUrlReport.URLCountryMapper.class);
+		aggregateJob.setReducerClass(CountryUrlReport.CountryListReducer.class);
+		aggregateJob.setOutputKeyClass(Text.class);
+		aggregateJob.setOutputValueClass(Text.class);
+
+		FileInputFormat.setInputPaths(aggregateJob, intermediateOutput);
+		FileOutputFormat.setOutputPath(aggregateJob, finalOutput);
+
+		System.exit(aggregateJob.waitForCompletion(true) ? 0 : 1);
+	}
+	else {
 	    System.out.println("Unrecognized job: " + otherArgs[0]);
 	    System.exit(-1);
 	}

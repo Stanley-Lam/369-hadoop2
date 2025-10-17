@@ -3,12 +3,10 @@ package csc369;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.LongWritable;
+
+import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-
 
 public class CountryRequestCount {
 
@@ -57,26 +55,46 @@ public class CountryRequestCount {
                 if (parts[0].equals("Country")) {
                     country = parts[1];
                 }
-                else if (parts[0].equals("Logs")) {
+                else if (parts[0].equals("LOG")) {
                     count++;
                 }
             }
             if (country != null && count > 0) {
-                countryCounts.put(country, countryCounts.getOrDefault(country, 0) + count);
+                context.write(new Text(country), new IntWritable(count));
             }
         }
+    }
 
-        public void sorter(Context context) throws IOException, InterruptedException {
-            countryCounts.entrySet()
-                    .stream()
-                    .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
-                    .forEach(entry -> {
-                            try {
-                                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
-                            } catch (IOException | InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                    });
+    public static class CountryCountMapper extends Mapper<LongWritable, Text, IntWritable, Text> {
+
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            String[] parts = value.toString().split("\t");
+            if (parts.length == 2) {
+                String country = parts[0];
+                int count = Integer.parseInt(parts[1]);
+                context.write(new IntWritable(count), new Text(country));
+            }
+        }
+    }
+
+    public static class IdentityReducer extends Reducer<IntWritable, Text, Text, IntWritable> {
+
+        public void reduce(IntWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            for (Text country : values) {
+                context.write(country, key);
+            }
+        }
+    }
+
+    public static class CountryGroupingComparator extends WritableComparator {
+
+        protected CountryGroupingComparator() {
+            super(IntWritable.class, true);
+        }
+
+        @Override
+        public int compare(WritableComparable w1, WritableComparable w2) {
+            return -1 * w1.compareTo(w2);
         }
     }
 }
