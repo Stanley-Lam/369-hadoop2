@@ -21,6 +21,7 @@ SumReducer aggregates all counts for each (country, url) pair.
 Reducer emits (country, total)
 
 Task 3: CountryUrlReport
+
 LogMapper parses each line of access log and emits (hostname, LOG 1).
 CountryMapper parses csv file and emits (hostname, country).
 JoinReducer takes all values and performs a reduce-side join.
