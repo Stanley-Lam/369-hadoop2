@@ -1,8 +1,6 @@
 package csc369;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -17,11 +15,11 @@ public class CountryRequestCount {
     public static class LogMapper extends Mapper<LongWritable, Text, Text, Text> {
 
         @Override
-        public void map(LongWritable key, Text value, Context context)  throws IOException, InterruptedException {
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] tokens = value.toString().split(" ");
             if (tokens.length > 0) {
-                String hostname = tokens[0];
-                context.write(new Text(hostname), new Text("LOG"));
+                String hostname = tokens[0].trim();
+                context.write(new Text(hostname), new Text("LOG\t1"));
             }
         }
     }
@@ -30,12 +28,12 @@ public class CountryRequestCount {
     public static class CountryMapper extends Mapper<LongWritable, Text, Text, Text> {
 
         @Override
-        public void map(LongWritable key, Text value, Context context)  throws IOException, InterruptedException {
-            String[] tokens = value.toString().split(",");
-            if (tokens.length == 2) {
-                String hostname = tokens[0];
-                String country = tokens[1];
-                context.write(new Text(hostname), new Text("Country\t" + country));
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            String[] fields = value.toString().split(",");
+            if (fields.length == 2) {
+                String hostname = fields[0].trim();
+                String country = fields[1].trim();
+                context.write(new Text(hostname), new Text("COUNTRY\t" + country));
             }
         }
     }
@@ -43,22 +41,20 @@ public class CountryRequestCount {
     // Reducer for request counts
     public static class JoinReducer extends  Reducer<Text, Text, Text, IntWritable> {
 
-        private Map<String, Integer> countryCounts = new HashMap<>();
-
         @Override
-        public void reduce(Text key, Iterable<Text> values, Context context)  throws IOException, InterruptedException {
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             String country = null;
             int count = 0;
 
             for (Text val : values) {
-                String[] parts = val.toString().split("\t", 2);
-                if (parts[0].equals("Country")) {
+                String[] parts = val.toString().split("\t");
+                if (parts[0].equals("COUNTRY")) {
                     country = parts[1];
-                }
-                else if (parts[0].equals("LOG")) {
-                    count++;
+                } else if (parts[0].equals("LOG")) {
+                    count += Integer.parseInt(parts[1]);
                 }
             }
+
             if (country != null && count > 0) {
                 context.write(new Text(country), new IntWritable(count));
             }
@@ -66,7 +62,7 @@ public class CountryRequestCount {
     }
 
     public static class CountryCountMapper extends Mapper<LongWritable, Text, IntWritable, Text> {
-
+        @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] parts = value.toString().split("\t");
             if (parts.length == 2) {
@@ -77,24 +73,25 @@ public class CountryRequestCount {
         }
     }
 
-    public static class IdentityReducer extends Reducer<IntWritable, Text, Text, IntWritable> {
-
-        public void reduce(IntWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            for (Text country : values) {
-                context.write(country, key);
-            }
-        }
-    }
-
-    public static class CountryGroupingComparator extends WritableComparator {
-
-        protected CountryGroupingComparator() {
+    public static class DescendingIntComparator extends WritableComparator {
+        protected DescendingIntComparator() {
             super(IntWritable.class, true);
         }
 
         @Override
-        public int compare(WritableComparable w1, WritableComparable w2) {
-            return -1 * w1.compareTo(w2);
+        public int compare(WritableComparable a, WritableComparable b) {
+            IntWritable x = (IntWritable) a;
+            IntWritable y = (IntWritable) b;
+            return -1 * x.compareTo(y); // reverse sort
+        }
+    }
+
+    public static class SortReducer extends Reducer<IntWritable, Text, Text, IntWritable> {
+        @Override
+        public void reduce(IntWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            for (Text country : values) {
+                context.write(country, key);
+            }
         }
     }
 }

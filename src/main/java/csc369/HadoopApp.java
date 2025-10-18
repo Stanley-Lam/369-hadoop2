@@ -41,108 +41,49 @@ public class HadoopApp {
 	    job.setOutputKeyClass(UserMessages.OUTPUT_KEY_CLASS);
 	    job.setOutputValueClass(UserMessages.OUTPUT_VALUE_CLASS);
 	    FileOutputFormat.setOutputPath(job, new Path(otherArgs[3]));
-
-	} else if ("WordCount".equalsIgnoreCase(otherArgs[0])) {
-	    job.setReducerClass(WordCount.ReducerImpl.class);
-	    job.setMapperClass(WordCount.MapperImpl.class);
-	    job.setOutputKeyClass(WordCount.OUTPUT_KEY_CLASS);
-	    job.setOutputValueClass(WordCount.OUTPUT_VALUE_CLASS);
-	    FileInputFormat.addInputPath(job, new Path(otherArgs[1]));
-	    FileOutputFormat.setOutputPath(job, new Path(otherArgs[2]));
-	} else if ("AccessLog".equalsIgnoreCase(otherArgs[0])) {
-	    job.setReducerClass(AccessLog.ReducerImpl.class);
-	    job.setMapperClass(AccessLog.MapperImpl.class);
-	    job.setOutputKeyClass(AccessLog.OUTPUT_KEY_CLASS);
-	    job.setOutputValueClass(AccessLog.OUTPUT_VALUE_CLASS);
-	    FileInputFormat.addInputPath(job, new Path(otherArgs[1]));
-	    FileOutputFormat.setOutputPath(job, new Path(otherArgs[2]));
 	} else if ("CountryRequestCount".equalsIgnoreCase(otherArgs[0])) {
+		Path accessLogPath = new Path(otherArgs[1]);
+		Path countryCsvPath = new Path(otherArgs[2]);
+		Path tempOutputPath = new Path("temp_output");
+		Path finalOutputPath = new Path(otherArgs[3]);
 
-		MultipleInputs.addInputPath(job, new Path(otherArgs[1]),
-				KeyValueTextInputFormat.class, CountryRequestCount.LogMapper.class);
-		MultipleInputs.addInputPath(job, new Path(otherArgs[2]),
-				TextInputFormat.class, CountryRequestCount.CountryMapper.class);
-
-		job.setReducerClass(CountryRequestCount.JoinReducer.class);
-
-		job.setOutputKeyClass(CountryRequestCount.OUTPUT_KEY_CLASS);
-		job.setOutputValueClass(CountryRequestCount.OUTPUT_VALUE_CLASS);
-		FileOutputFormat.setOutputPath(job, new Path(otherArgs[3]));
-	} else if ("CountryUrlCount".equalsIgnoreCase(otherArgs[0])) {
-
-		Path logInput = new Path(otherArgs[1]);
-		Path countryInput = new Path(otherArgs[2]);
-		Path intermediateOutput = new Path("intermediate_country_url");
-		Path finalOutput = new Path(otherArgs[3]);
-
-		Job joinJob = new Job(conf, "Join Logs with Country");
+		Job joinJob = Job.getInstance(conf, "Join and Count Requests Per Country");
 		joinJob.setJarByClass(HadoopApp.class);
 
-		MultipleInputs.addInputPath(joinJob, logInput, TextInputFormat.class, CountryUrlCount.LogMapper.class);
-		MultipleInputs.addInputPath(joinJob, countryInput, TextInputFormat.class, CountryUrlCount.CountryMapper.class);
+		MultipleInputs.addInputPath(joinJob, accessLogPath, TextInputFormat.class, CountryRequestCount.LogMapper.class);
+		MultipleInputs.addInputPath(joinJob, countryCsvPath, TextInputFormat.class, CountryRequestCount.CountryMapper.class);
 
-		joinJob.setReducerClass(CountryUrlCount.JoinReducer.class);
+		joinJob.setReducerClass(CountryRequestCount.JoinReducer.class);
 		joinJob.setOutputKeyClass(Text.class);
 		joinJob.setOutputValueClass(IntWritable.class);
-		FileOutputFormat.setOutputPath(joinJob, intermediateOutput);
+		FileOutputFormat.setOutputPath(joinJob, tempOutputPath);
 
 		if (!joinJob.waitForCompletion(true)) {
-			System.err.println("Join phase failed.");
 			System.exit(1);
 		}
 
-		Job aggregateJob = new Job(conf, "Aggregate Country URL Counts");
-		aggregateJob.setJarByClass(HadoopApp.class);
+		Job sortJob = Job.getInstance(conf, "Sort Countries by Request Count Descending");
+		sortJob.setJarByClass(HadoopApp.class);
 
-		aggregateJob.setMapperClass(CountryUrlCount.IdentityMapper.class);
-		aggregateJob.setReducerClass(CountryUrlCount.SumReducer.class);
-		aggregateJob.setOutputKeyClass(Text.class);
-		aggregateJob.setOutputValueClass(IntWritable.class);
+		sortJob.setMapperClass(CountryRequestCount.CountryCountMapper.class);
+		sortJob.setReducerClass(CountryRequestCount.SortReducer.class);
+		sortJob.setSortComparatorClass(CountryRequestCount.DescendingIntComparator.class);
 
-		FileInputFormat.setInputPaths(aggregateJob, intermediateOutput);
-		FileOutputFormat.setOutputPath(aggregateJob, finalOutput);
+		sortJob.setMapOutputKeyClass(IntWritable.class);
+		sortJob.setMapOutputValueClass(Text.class);
+		sortJob.setOutputKeyClass(Text.class);
+		sortJob.setOutputValueClass(IntWritable.class);
 
-		System.exit(aggregateJob.waitForCompletion(true) ? 0 : 1);
-	} else if ("CountryUrlReport".equalsIgnoreCase(otherArgs[0])) {
+		TextInputFormat.addInputPath(sortJob, tempOutputPath);
+		FileOutputFormat.setOutputPath(sortJob, finalOutputPath);
 
-		Path logInput = new Path(otherArgs[1]);
-		Path countryInput = new Path(otherArgs[2]);
-		Path intermediateOutput = new Path("intermediate_url_country");
-		Path finalOutput = new Path(otherArgs[3]);
-
-		Job joinJob = new Job(conf, "Join Logs with Country");
-		joinJob.setJarByClass(HadoopApp.class);
-
-		MultipleInputs.addInputPath(joinJob, logInput, TextInputFormat.class, CountryUrlReport.LogMapper.class);
-		MultipleInputs.addInputPath(joinJob, countryInput, TextInputFormat.class, CountryUrlReport.CountryMapper.class);
-
-		joinJob.setReducerClass(CountryUrlReport.JoinReducer.class);
-		joinJob.setOutputKeyClass(Text.class);
-		joinJob.setOutputValueClass(Text.class);
-		FileOutputFormat.setOutputPath(joinJob, intermediateOutput);
-
-		if (!joinJob.waitForCompletion(true)) {
-			System.err.println("Join phase failed.");
-			System.exit(1);
-		}
-
-		Job aggregateJob = new Job(conf, "Aggregate Country Lists per URL");
-		aggregateJob.setJarByClass(HadoopApp.class);
-		aggregateJob.setMapperClass(CountryUrlReport.URLCountryMapper.class);
-		aggregateJob.setReducerClass(CountryUrlReport.CountryListReducer.class);
-		aggregateJob.setOutputKeyClass(Text.class);
-		aggregateJob.setOutputValueClass(Text.class);
-
-		FileInputFormat.setInputPaths(aggregateJob, intermediateOutput);
-		FileOutputFormat.setOutputPath(aggregateJob, finalOutput);
-
-		System.exit(aggregateJob.waitForCompletion(true) ? 0 : 1);
+		System.exit(sortJob.waitForCompletion(true) ? 0 : 1);
 	}
 	else {
 	    System.out.println("Unrecognized job: " + otherArgs[0]);
 	    System.exit(-1);
 	}
-        System.exit(job.waitForCompletion(true) ? 0: 1);
+        //System.exit(job.waitForCompletion(true) ? 0: 1);
     }
 
 }

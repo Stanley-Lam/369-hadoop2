@@ -45,7 +45,6 @@ public class CountryUrlCount {
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             String country = null;
             List<String> urls = new ArrayList<>();
-            System.out.println("hi");
 
             for (Text val : values) {
                 String[] parts = val.toString().split("\t", 2);
